@@ -1,0 +1,9 @@
+apiVersion: apps.hyj.cn/v1
+kind: Broke
+metadata:
+  labels:
+    app.kubernetes.io/name: kubebuilder-rocketmq
+    app.kubernetes.io/managed-by: kustomize
+  name: broke-sample
+spec:
+  # TODO(user): Add fields here

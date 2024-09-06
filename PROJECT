@@ -7,4 +7,14 @@ layout:
 - go.kubebuilder.io/v4
 projectName: kubebuilder-rocketmq
 repo: github.com/asjfoajs/kubebuilder-rocketmq
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: hyj.cn
+  group: apps
+  kind: Broke
+  path: github.com/asjfoajs/kubebuilder-rocketmq/api/v1
+  version: v1
 version: "3"
