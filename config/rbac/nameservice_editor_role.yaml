@@ -1,0 +1,27 @@
+# permissions for end users to edit nameservices.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    app.kubernetes.io/name: kubebuilder-rocketmq
+    app.kubernetes.io/managed-by: kustomize
+  name: nameservice-editor-role
+rules:
+- apiGroups:
+  - apps.hyj.cn
+  resources:
+  - nameservices
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - apps.hyj.cn
+  resources:
+  - nameservices/status
+  verbs:
+  - get

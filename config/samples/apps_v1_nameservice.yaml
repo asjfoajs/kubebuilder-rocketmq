@@ -1,0 +1,9 @@
+apiVersion: apps.hyj.cn/v1
+kind: NameService
+metadata:
+  labels:
+    app.kubernetes.io/name: kubebuilder-rocketmq
+    app.kubernetes.io/managed-by: kustomize
+  name: nameservice-sample
+spec:
+  # TODO(user): Add fields here

@@ -17,4 +17,13 @@ resources:
   kind: Broke
   path: github.com/asjfoajs/kubebuilder-rocketmq/api/v1
   version: v1
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: hyj.cn
+  group: apps
+  kind: NameService
+  path: github.com/asjfoajs/kubebuilder-rocketmq/api/v1
+  version: v1
 version: "3"
