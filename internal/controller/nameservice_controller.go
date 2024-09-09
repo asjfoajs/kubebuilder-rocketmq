@@ -114,6 +114,7 @@ func (r *NameServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 func (r *NameServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&appsv1s.NameService{}).
+		Owns(&corev1.Pod{}).
 		Complete(r)
 }
 
