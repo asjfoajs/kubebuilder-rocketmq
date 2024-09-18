@@ -82,9 +82,12 @@ func (r *NameServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	// Check if the statefulSet already exists, if not create a new one
 	found := &appsv1.StatefulSet{}
 
+	//返回一个statefulSet，注意这里并没有创建
 	dep := r.statefulSetForNameService(instance)
+
 	err = r.Client.Get(context.TODO(), types.NamespacedName{Name: dep.Name, Namespace: dep.Namespace}, found)
 	if err != nil && errors.IsNotFound(err) {
+		//没有找到就创建
 		err = r.Client.Create(context.TODO(), dep)
 		if err != nil {
 			reqLogger.Error(err, "Failed to create new StatefulSet of NameService", "StatefulSet.Namespace", dep.Namespace, "StatefulSet.Name", dep.Name)
@@ -99,6 +102,7 @@ func (r *NameServiceReconciler) Reconcile(ctx context.Context, req ctrl.Request)
 	size := instance.Spec.Size
 	if *found.Spec.Replicas != size {
 		found.Spec.Replicas = &size
+		//数量不够？
 		err = r.Client.Update(context.TODO(), found)
 		reqLogger.Info("NameService Updated")
 		if err != nil {
@@ -119,8 +123,12 @@ func (r *NameServiceReconciler) SetupWithManager(mgr ctrl.Manager) error {
 }
 
 func (r *NameServiceReconciler) statefulSetForNameService(nameService *appsv1s.NameService) *appsv1.StatefulSet {
+	//Convert to this structure
+	//{"app": "name_service", "name_service_cr": nameService.Name}
 	ls := labelsForNameService(nameService.Name)
 
+	//如果没有设置VCT的名字，则随机生成一个,
+	//因为只需要一个VCT去挂载log目录的数据所以这里是[0]
 	if strings.EqualFold(nameService.Spec.VolumeClaimTemplates[0].Name, "") {
 		nameService.Spec.VolumeClaimTemplates[0].Name = uuid.New().String()
 	}
@@ -163,6 +171,7 @@ func (r *NameServiceReconciler) statefulSetForNameService(nameService *appsv1s.N
 							Name:      nameService.Spec.VolumeClaimTemplates[0].Name,
 							SubPath:   constants.LogSubPathName,
 						}},
+						//为 Pod 或容器配置安全上下文
 						SecurityContext: getContainerSecurityContext(nameService),
 					}},
 					Volumes:         getVolumes(nameService),
@@ -195,34 +204,43 @@ func (r *NameServiceReconciler) updateNameServiceStatus(instance *appsv1s.NameSe
 		reqLogger.Error(err, "Failed to list pods.", "NameService.Namespace", instance.Namespace, "NameService.Name", instance.Name)
 		return reconcile.Result{Requeue: true}, err
 	}
+	//获取所有pod的ip
 	hostIps := getNameServers(podList.Items)
 
+	//先按照ip 排序，在列表中排序
 	sort.Strings(hostIps)
 	sort.Strings(instance.Status.NameServices)
 
+	//生成类似
+	//192.168.1.1:9876;192.168.1.2:9876;192.168.1.3:9876;
 	nameServerListStr := ""
 	for _, value := range hostIps {
 		nameServerListStr = nameServerListStr + value + ":9876;"
 	}
 
 	// Update status.NameServers if needed
+	// 两个数组不相等，需要更新状态
 	if !reflect.DeepEqual(hostIps, instance.Status.NameServices) {
+		//原来的pod列表
 		oldNameServerListStr := ""
 		for _, value := range instance.Status.NameServices {
 			oldNameServerListStr = oldNameServerListStr + value + ":9876;"
 		}
 
+		//从新的复制一份数组并去除;
 		share.NameServersStr = nameServerListStr[:len(nameServerListStr)-1]
 		reqLogger.Info("share.NameServersStr:" + share.NameServersStr)
 
+		//老的小于8，就是ip不可能小于8只能说明有问题
 		if len(oldNameServerListStr) <= constants.MinIpListLength {
 			oldNameServerListStr = share.NameServersStr
 		} else if len(share.NameServersStr) > constants.MinIpListLength {
+			//正常更新状态
 			oldNameServerListStr = oldNameServerListStr[:len(oldNameServerListStr)-1]
 			share.IsNameServersStrUpdated = true
 		}
 		reqLogger.Info("oldNameServerListStr:" + oldNameServerListStr)
-
+		//更新状态
 		instance.Status.NameServices = hostIps
 		err := r.Client.Status().Update(context.TODO(), instance)
 		// Update the NameServers status with the host ips
@@ -233,6 +251,7 @@ func (r *NameServiceReconciler) updateNameServiceStatus(instance *appsv1s.NameSe
 		}
 
 		//use admin tool to update broker config
+		//就是将broker的配置文件中关于nameServer的配置更新，同admin的方式
 		if share.IsNameServersStrUpdated && (len(oldNameServerListStr) > constants.MinIpListLength) &&
 			(len(share.NameServersStr) > constants.MinIpListLength) {
 
@@ -281,6 +300,8 @@ func labelsForNameService(name string) map[string]string {
 	return map[string]string{"app": "name_service", "name_service_cr": name}
 }
 
+// getContainerSecurityContext returns the security context for the container
+// 不直接赋值而单独抽出一个方法是为了避免如果为空时，返回new的一个空对象，而不是空
 func getContainerSecurityContext(nameService *appsv1s.NameService) *corev1.SecurityContext {
 	var securityContext = corev1.SecurityContext{}
 	if nameService.Spec.ContainerSecurityContext != nil {
@@ -289,11 +310,14 @@ func getContainerSecurityContext(nameService *appsv1s.NameService) *corev1.Secur
 	return &securityContext
 }
 
+// getVolumes 根据存储模式，创建卷
 func getVolumes(nameService *appsv1s.NameService) []corev1.Volume {
 	switch nameService.Spec.StorageMode {
+	//不需要创建卷
 	case constants.StorageModeStorageClass:
 		return nil
 	case constants.StorageModeEmptyDir:
+		//创建一个临时
 		volumes := []corev1.Volume{{
 			Name: nameService.Spec.VolumeClaimTemplates[0].Name,
 			VolumeSource: corev1.VolumeSource{
@@ -304,6 +328,7 @@ func getVolumes(nameService *appsv1s.NameService) []corev1.Volume {
 	case constants.StorageModeHostPath:
 		fallthrough
 	default:
+		//创建一个本地
 		volumes := []corev1.Volume{{
 			Name: nameService.Spec.VolumeClaimTemplates[0].Name,
 			VolumeSource: corev1.VolumeSource{
@@ -323,6 +348,7 @@ func getPodSecurityContext(nameService *appsv1s.NameService) *corev1.PodSecurity
 	return &securityContext
 }
 
+// getVolumeClaimTemplates 为StorageClass创建一个VCT
 func getVolumeClaimTemplates(nameService *appsv1s.NameService) []corev1.PersistentVolumeClaim {
 	switch nameService.Spec.StorageMode {
 	case constants.StorageModeStorageClass:
@@ -337,7 +363,9 @@ func getVolumeClaimTemplates(nameService *appsv1s.NameService) []corev1.Persiste
 func getNameServers(pods []corev1.Pod) []string {
 	var nameServers []string
 	for _, pod := range pods {
+		//pod为运行状态，且IP不为空
 		if pod.Status.Phase == corev1.PodRunning && !strings.EqualFold(pod.Status.PodIP, "") {
+			//将ip添加到一个string数组中
 			nameServers = append(nameServers, pod.Status.PodIP)
 		}
 	}
